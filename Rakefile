@@ -1,42 +1,82 @@
-require 'puppet_blacksmith/rake_tasks'
-require 'puppet-lint/tasks/puppet-lint'
 require 'puppetlabs_spec_helper/rake_tasks'
 
-PuppetLint.configuration.fail_on_warnings = true
-PuppetLint.configuration.send('relative')
-PuppetLint.configuration.send('disable_80chars')
-PuppetLint.configuration.send('disable_class_inherits_from_params_class')
-PuppetLint.configuration.send('disable_documentation')
-PuppetLint.configuration.send('disable_single_quote_string_with_variables')
-PuppetLint.configuration.ignore_paths = ["spec/**/*.pp", "pkg/**/*.pp"]
-
-desc 'Generate pooler nodesets'
-task :gen_nodeset do
-  require 'beaker-hostgenerator'
-  require 'securerandom'
-  require 'fileutils'
-
-  agent_target = ENV['TEST_TARGET']
-  if ! agent_target
-    STDERR.puts 'TEST_TARGET environment variable is not set'
-    STDERR.puts 'setting to default value of "redhat-64default."'
-    agent_target = 'redhat-64default.'
-  end
-
-  master_target = ENV['MASTER_TEST_TARGET']
-  if ! master_target
-    STDERR.puts 'MASTER_TEST_TARGET environment variable is not set'
-    STDERR.puts 'setting to default value of "redhat7-64mdcl"'
-    master_target = 'redhat7-64mdcl'
-  end
-
-  targets = "#{master_target}-#{agent_target}"
-  cli = BeakerHostGenerator::CLI.new([targets])
-  nodeset_dir = "tmp/nodesets"
-  nodeset = "#{nodeset_dir}/#{targets}-#{SecureRandom.uuid}.yaml"
-  FileUtils.mkdir_p(nodeset_dir)
-  File.open(nodeset, 'w') do |fh|
-    fh.print(cli.execute)
-  end
-  puts nodeset
+# load optional tasks for releases
+# only available if gem group releases is installed
+begin
+  require 'voxpupuli/release/rake_tasks'
+rescue LoadError
 end
+
+PuppetLint.configuration.log_format = '%{path}:%{line}:%{check}:%{KIND}:%{message}'
+PuppetLint.configuration.absolute_classname_reverse = true
+
+exclude_paths = %w(
+  pkg/**/*
+  vendor/**/*
+  .vendor/**/*
+  spec/**/*
+)
+PuppetLint.configuration.ignore_paths = exclude_paths
+PuppetSyntax.exclude_paths = exclude_paths
+
+desc 'Auto-correct puppet-lint offenses'
+task 'lint:auto_correct' do
+  Rake::Task[:lint_fix].invoke
+end
+
+desc 'Run acceptance tests'
+RSpec::Core::RakeTask.new(:acceptance) do |t|
+  t.pattern = 'spec/acceptance'
+end
+
+desc 'Run tests'
+task test: [:release_checks]
+
+namespace :check do
+  desc 'Check for trailing whitespace'
+  task :trailing_whitespace do
+    Dir.glob('**/*.md', File::FNM_DOTMATCH).sort.each do |filename|
+      next if filename =~ %r{^((modules|acceptance|\.?vendor|spec/fixtures|pkg)/|REFERENCE.md)}
+      File.foreach(filename).each_with_index do |line, index|
+        if line =~ %r{\s\n$}
+          puts "#{filename} has trailing whitespace on line #{index + 1}"
+          exit 1
+        end
+      end
+    end
+  end
+end
+Rake::Task[:release_checks].enhance ['check:trailing_whitespace']
+
+desc "Run main 'test' task and report merged results to coveralls"
+task test_with_coveralls: [:test] do
+  if Dir.exist?(File.expand_path('../lib', __FILE__))
+    require 'coveralls/rake/task'
+    Coveralls::RakeTask.new
+    Rake::Task['coveralls:push'].invoke
+  else
+    puts 'Skipping reporting to coveralls.  Module has no lib dir'
+  end
+end
+
+desc 'Generate REFERENCE.md'
+task :reference, [:debug, :backtrace] do |t, args|
+  patterns = ''
+  Rake::Task['strings:generate:reference'].invoke(patterns, args[:debug], args[:backtrace])
+end
+
+begin
+  require 'github_changelog_generator/task'
+  GitHubChangelogGenerator::RakeTask.new :changelog do |config|
+    version = (Blacksmith::Modulefile.new).version
+    config.future_release = "v#{version}" if version =~ /^\d+\.\d+.\d+$/
+    config.header = "# Changelog\n\nAll notable changes to this project will be documented in this file.\nEach new release typically also includes the latest modulesync defaults.\nThese should not affect the functionality of the module."
+    config.exclude_labels = %w{duplicate question invalid wontfix wont-fix modulesync skip-changelog}
+    config.user = 'voxpupuli'
+    metadata_json = File.join(File.dirname(__FILE__), 'metadata.json')
+    metadata = JSON.load(File.read(metadata_json))
+    config.project = metadata['name']
+  end
+rescue LoadError
+end
+# vim: syntax=ruby

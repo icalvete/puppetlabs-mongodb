@@ -9,6 +9,9 @@ systemLog.destination: file
 <% if @logappend -%>
 systemLog.logAppend: <%= @logappend %>
 <% end -%>
+<% if @system_logrotate -%>
+systemLog.logRotate: <%= @system_logrotate %>
+<% end -%>
 <% elsif @syslog -%>
 systemLog.destination: syslog
 <% end -%>
@@ -86,10 +89,10 @@ security.javascriptEnabled: <%= @noscripting %>
 
 #Net
 <% if @ipv6 -%>
-net.ipv6=<%= @ipv6 %>
+net.ipv6: <%= @ipv6 %>
 <% end -%>
 <% if @bind_ip -%>
-net.bindIp:  <%= Array(@bind_ip).join(',') %>
+net.bindIp:  <%= @bind_ip.join(',') %>
 <% end -%>
 <% if @port -%>
 net.port: <%= @port %>
@@ -104,13 +107,19 @@ net.http.RESTInterfaceEnabled: true
 net.maxIncomingConnections: <%= @maxconns %>
 <% end -%>
 <% if ! @nohttpinterface.nil? -%>
-net.http.enabled: <%= ! @nohttpinterface %>
+#net.http.enabled: <%= ! @nohttpinterface %>
 <% end -%>
 <% if @ssl -%>
-net.ssl.mode: requireSSL
+net.ssl.mode: <%= @ssl_mode %>
 net.ssl.PEMKeyFile: <%= @ssl_key %>
 <% if @ssl_ca -%>
 net.ssl.CAFile: <%= @ssl_ca %>
+<% end -%>
+<% if @ssl_weak_cert -%>
+net.ssl.weakCertificateValidation: <%= @ssl_weak_cert %>
+<% end -%>
+<% if @ssl_invalid_hostnames -%>
+net.ssl.allowInvalidHostnames: <%= @ssl_invalid_hostnames %>
 <% end -%>
 <% end -%>
 
@@ -144,13 +153,11 @@ operationProfiling.slowOpThresholdMs: <%= @slowms %>
 
 
 <% if @set_parameter -%>
-setParameter: 
-<% if @set_parameter.is_a?(Array) -%>
-<% @set_parameter.each do |p| -%> 
-  <%= p -%>
-<% end -%>
-<% else -%>
-  <%= @set_parameter -%>
-<% end -%>
+setParameter: <%= @set_parameter %> 
 <% end -%>
 
+<% if @config_data -%>
+<% @config_data.each do |k,v| -%>
+<%= k %>: <%= v %>
+<% end -%>
+<% end -%>

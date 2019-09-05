@@ -3,20 +3,21 @@ class mongodb::repo::apt inherits mongodb::repo {
   # we try to follow/reproduce the instruction
   # from http://docs.mongodb.org/manual/tutorial/install-mongodb-on-ubuntu/
 
-  include ::apt
+  include apt
 
-  if($::mongodb::repo::ensure == 'present' or $::mongodb::repo::ensure == true) {
+  if($mongodb::repo::ensure == 'present' or $mongodb::repo::ensure == true) {
     apt::source { 'mongodb':
-      location => $::mongodb::repo::location,
-      release  => $::mongodb::repo::release,
-      repos    => $::mongodb::repo::repos,
+      location => $mongodb::repo::location,
+      release  => $mongodb::repo::release,
+      repos    => $mongodb::repo::repos,
       key      => {
-        'id'     => $::mongodb::repo::key,
-        'server' => $::mongodb::repo::key_server,
-      }
+        'id'      => $mongodb::repo::key,
+        'server'  => $mongodb::repo::key_server,
+        'options' => $mongodb::repo::aptkey_options,
+      },
     }
 
-    Apt::Source['mongodb']->Package<|tag == 'mongodb'|>
+    Apt::Source['mongodb'] -> Package<| tag == 'mongodb_package' |>
   }
   else {
     apt::source { 'mongodb':
